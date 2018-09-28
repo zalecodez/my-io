@@ -1,18 +1,21 @@
 #include <stdio.h>
-#include "myio.h"
 #include <stdlib.h>
+#include "myio.h"
 
 
 int main(int argc, char* argv[]){
+	MYFILE *fp;
+	char buff[100];
 
-	myopen("./Swag", "r");
-	myopen("./Swag", "r+");
-	myopen("./Swag", "w");
-	myopen("./Swag", "w+");
-	myopen("./Swag", "a");
-	myopen("./Swag", "a+");
-	
+	fp = myopen("Makefile", "r");
+	fp = myopen("Swag", "r");
 
-	printf("%i",fopen("./Makefile", "refd"));
+	myread(buff, 10, 1, fp);
+
+	printf("%s\n", buff);
+
+	perror("error");
+
+
 
 }

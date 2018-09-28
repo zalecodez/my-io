@@ -13,30 +13,51 @@ typedef struct file_info{
 	int fd;
 	long file_offset;
 	int buffer_offset;
+	int buffer_end;
 	char buffer[FILE_BUFFER_SIZE];
 }MYFILE;
 
 void getFlags(const char *mode, int* flags, int* end);
 
 
-size_t myread(void *ptr, size_t size, size_t nmemb, MYFILE *stream){
+int myread(void *ptr, size_t size, size_t nmemb, MYFILE *stream){
 
-	int bytes_read = 0;
-	if((bytes_read=read(stream->fd, stream->buffer, FILE_BUFFER_SIZE)) == -1){
-		return 0;
+	int toRead = size*nmemb;
+	int leftInBuff = stream->buffer_end - stream->buffer_offset;
+	int bytesRead = 0;
+	int bytesReadFromFile = 0;
+
+	if(leftInBuff == 0){
+		if((bytesReadFromFile+=read(stream->fd, stream->buffer, FILE_BUFFER_SIZE)) == -1){
+			perror("");
+			return 0;
+		}
+		else{
+			stream->buffer_offset = 0;	
+			stream->buffer_end = bytesReadFromFile;
+		}
 	}
-	else{
-		//set file offset to the number of bytes read
-		stream->file_offset += bytes_read;
 
-		//read from stream buffer into ptr
-		
-		strncpy(ptr, stream->buffer, nmemb*size);
-
-
-		//update buffer offset
-		
+	while(toRead >= leftInBuff){
+		memcpy(ptr,(stream->buffer+stream->buffer_offset),leftInBuff);
+		bytesRead += leftInBuff;
+		toRead -= leftInBuff;
+		if((bytesReadFromFile+=read(stream->fd, stream->buffer, FILE_BUFFER_SIZE)) == -1){
+			perror("");
+			return 0;
+		}
+		else{
+			stream->buffer_offset = 0;	
+			stream->buffer_end = bytesReadFromFile;
+		}
+		leftInBuff = bytesReadFromFile - stream->buffer_offset;
 	}
+
+	memcpy(ptr,(stream->buffer+stream->buffer_offset),toRead);
+	bytesRead += toRead;
+	stream->buffer_offset += toRead;
+
+	return bytesRead;
 }
 
 int myseek(MYFILE *stream, long offset, int whence){
@@ -66,12 +87,11 @@ MYFILE *myopen(const char *pathname, const char *mode){
 	int fd;
 	int flags = 0;
 	int end = 0;
-	char flagstring[100] = {0};
 	struct stat sb;
 	long offset = 0;
 
 	//determine flags
-	flags = getFlags(mode, &flags, &end);
+	getFlags(mode, &flags, &end);
 
 	//get file stat to check if it's a valid file 
 	//and to determine it's size later
@@ -87,7 +107,6 @@ MYFILE *myopen(const char *pathname, const char *mode){
 
 	//open file and get the file descriptor
 	if((fd = open(pathname,flags,CREATE_MODE)) == -1){
-		perror(pathname);
 		return NULL;
 	}
 
@@ -98,7 +117,8 @@ MYFILE *myopen(const char *pathname, const char *mode){
 	fp->fd = fd;
 	fp->file_offset = offset;
 	fp->buffer_offset = 0;
-	strncpy(fp->buffer, "", FILE_BUFFER_SIZE);
+	fp->buffer_end = 0;
+	//strncpy(fp->buffer, "", FILE_BUFFER_SIZE);
 
 	//return MYFILE struct
 	return fp;
@@ -111,14 +131,15 @@ void getFlags(const char *mode, int* flags, int* end){
 
 	switch(mode[0]){
 		case 'a':
-			*flags = flags ? flags : O_WRONLY;
+			*flags = *flags ? *flags : O_WRONLY;
 			*flags |= O_APPEND | O_CREAT;
-			end = 1;
+			*end = 1;
 			break;
 		case 'r':
-			*flags = flags ? flags : O_RDONLY;
+			*flags = *flags ? *flags : O_RDONLY;
+			break;
 		case 'w':
-			*flags = flags ? flags : O_WRONLY;
+			*flags = *flags ? *flags : O_WRONLY;
 			*flags |= O_CREAT | O_TRUNC;
 			break;
 		default:
